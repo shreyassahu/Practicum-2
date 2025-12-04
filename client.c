@@ -10,97 +10,331 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <sys/stat.h>
+#include <stdlib.h>
+
+#define BUFFER_SIZE 8196
+
+void printUsage();
+int connectToServer();
+int handleWrite(int socket_desc, char* local_file_path, char* remote_file_path);
+int handleGet(int socket_desc, char* remote_file_path, char* local_file_path);
+int handleRM(int socket_desc, char* remote_file_path);
+int handleLS(int socket_desc, char* remote_file_path);
+int createDirectories(char* file_path);
 
 int main(int argc, char *argv[])
 {
   if(argc < 3) {
-    printf("The minimum number of arguments is 4\n");
-    printf("Allowed commands are:\n");
-    printf("rfs WRITE local-file-path remote-file-path\n");
-    printf("rfs remote-file-path local-file-path\n");
-    printf("rfs RM remote-file-path");
-    return -1;
+    printUsage();
+    return 1;
   }
 
   char* command = argv[1];
-  char* remoteFileName;
-  char* localFileName;
 
-  if(strcmp(command, "WRITE") != 0 &&
-    strcmp(command, "GET") != 0 &&
-    strcmp(command, "RM") != 0) {
-      printf("Enter valid command/n");
+
+  // Handle write command
+  if(strcmp(command, "WRITE") == 0) {
+    if(argc < 4) {
+      printf("WRITE requires valid file paths\n");
+      printUsage();
+      return 1;
     }
 
-  int socket_desc;
-  struct sockaddr_in server_addr;
-  char server_message[2000], client_message[2000];
-  char fullCommand[2000];
-  
-  // Clean buffers:
-  memset(server_message,'\0',sizeof(server_message));
-  memset(client_message,'\0',sizeof(client_message));
-  memset(fullCommand, '\0', sizeof(fullCommand));
+    char *local_file_path = argv[2];
+    char *remote_file_path = argv[3];
 
+    int socket_desc = connectToServer();
+    if(socket_desc < 0) {
+      printf("Couldn't connect to server\n");
+      return 1;
+    }
+
+    int res = handleWrite(socket_desc, local_file_path, remote_file_path);
+    close(socket_desc);
+    return res;
+  }
+
+  // Handle GET command
+  if(strcmp(command, "GET") == 0) {
+    if(argc < 4) {
+      printf("GET requires valid file paths\n");
+      printUsage();
+      return 1;
+    }
+
+    char* remote_file_path = argv[2];
+    char* local_file_path = argv[3];
+
+    int socket_desc = connectToServer();
+    if(socket_desc < 0) {
+      printf("Couldn't connect to server\n");
+      return 1;
+    }
+
+    int res = handleGet(socket_desc, remote_file_path, local_file_path);
+    close(socket_desc);
+    return res;
+  }
+
+  // Handle RM command
   if(strcmp(command, "RM") == 0) {
     if(argc < 3) {
-        printf("RM requires remote-file-path\n");
-        return -1;
+      printf("RM requires remote file path\n");
+      printUsage();
+      return 1;
     }
-    snprintf(fullCommand, sizeof(fullCommand), "%s %s", command, argv[2]);
-  } 
-  else {
-    if(argc < 4) {
-        printf("%s requires two file paths\n", command);
-        return -1;
+
+    char* remote_file_path = argv[2];
+
+    int socket_desc = connectToServer();
+    if(socket_desc < 0) {
+      printf("Couldn't connect to server\n");
+      return 1;
     }
-    snprintf(fullCommand, sizeof(fullCommand), "%s %s %s", command, argv[2], argv[3]);
+
+    int res = handleRM(socket_desc, remote_file_path);
+    close(socket_desc);
+    return res;
   }
-    
-  printf("Sending command: %s\n", fullCommand);
-  
-  // Create socket:
-  socket_desc = socket(AF_INET, SOCK_STREAM, 0);
-  
+
+  if(strcmp(command, "LS") == 0) {
+    if(argc < 3) {
+      printf("LS requires remote file path\n");
+      printUsage();
+      return 1;
+    }
+
+    char* remote_file_path = argv[2];
+
+    int socket_desc = connectToServer();
+    if(socket_desc < 0) {
+      printf("Couldn't connect to server\n");
+      return 1;
+    }
+
+    int res = handleLS(socket_desc, remote_file_path);
+    close(socket_desc);
+    return res;
+  } 
+
+  return 1;
+}
+
+void printUsage() {
+  printf("The minimum number of arguments is 4\n");
+  printf("Allowed commands are:\n");
+  printf("rfs WRITE local-file-path remote-file-path\n");
+  printf("rfs remote-file-path local-file-path\n");
+  printf("rfs RM remote-file-path\n");
+}
+
+int connectToServer() {
+  int socket_desc = socket(AF_INET, SOCK_STREAM, 0);
+  struct sockaddr_in server_addr;
+
   if(socket_desc < 0){
     printf("Unable to create socket\n");
     close(socket_desc);
     return -1;
   }
-  
+
   printf("Socket created successfully\n");
-  
-  // Set port and IP the same as server-side:
+
   server_addr.sin_family = AF_INET;
   server_addr.sin_port = htons(2000);
-  server_addr.sin_addr.s_addr = inet_addr("10.110.59.141");
-  
-  // Send connection request to server:
+  server_addr.sin_addr.s_addr = inet_addr("10.0.0.77");
+
   if(connect(socket_desc, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0){
     printf("Unable to connect\n");
     close(socket_desc);
     return -1;
   }
+
   printf("Connected with server successfully\n");
 
-  // Send the message to server:
-  if(send(socket_desc, fullCommand, strlen(fullCommand), 0) < 0){
-    printf("Unable to send message\n");
+  return socket_desc;
+}
+
+int handleWrite(int socket_desc, char* local_file_path, char* remote_file_path) {
+  FILE *fptr = fopen(local_file_path, "rb");
+
+  if(fptr == NULL) {
+    printf("Couldn't open file\n");
+    return -1;
+  }
+
+  // Retrieve the size of the file
+  fseek(fptr, 0, SEEK_END);
+  long file_size = ftell(fptr);
+  fseek(fptr, 0, SEEK_SET);
+
+  char buffer[BUFFER_SIZE];
+  snprintf(buffer, sizeof(buffer), "WRITE %s %ld", remote_file_path, file_size);
+
+  if(send(socket_desc, buffer, strlen(buffer), 0) < 0) {
+    printf("Couldn't send command");
+    fclose(fptr);
     close(socket_desc);
     return -1;
   }
-  
-  // Receive the server's response:
-  if(recv(socket_desc, server_message, sizeof(server_message), 0) < 0){
-    printf("Error while receiving server's msg\n");
+
+  // Initial handshake response from server ready to write
+  char server_response[256];
+  memset(server_response, '\0', sizeof(server_response));
+  if(recv(socket_desc, server_response, sizeof(server_response), 0) < 0) {
+    printf("Error while receiving server's message\n");
+    fclose(fptr);
     close(socket_desc);
     return -1;
   }
+
+  if(strcmp(server_response, "READY") != 0) {
+    printf("Server error: %s", server_response);
+    fclose(fptr);
+    close(socket_desc);
+    return -1;
+  }
+
+  // Sending file data
+  size_t bytes;
+  while((bytes = fread(buffer, 1, BUFFER_SIZE, fptr)) > 0) {
+    if(send(socket_desc, buffer, bytes, 0) < 0) {
+      printf("Couldn't send data from file");
+      fclose(fptr);
+      close(socket_desc);
+      return -1;
+    }
+  }
+
+  fclose(fptr);
+  memset(server_response, '\0', sizeof(server_response));
+  if(recv(socket_desc, server_response, sizeof(server_response), 0) > 0) {
+    printf("Final response from server: %s", server_response);
+  }
+
+  return 0;
+
+}
+
+int handleGet(int socket_desc, char* remote_file_path, char* local_file_path) {
+  char buffer[BUFFER_SIZE];
+  snprintf(buffer, sizeof(buffer), "GET %s", remote_file_path);
+
+  if(send(socket_desc, buffer, strlen(buffer), 0) < 0) {
+    printf("Couldn't send command");
+    return -1;
+  }
+
+  char server_response[256];
+  memset(server_response, '\0', sizeof(server_response));
+  if(recv(socket_desc, server_response, sizeof(server_response), 0) < 0) {
+    printf("Error while receiving server's message\n");
+    close(socket_desc);
+    return -1;
+  } 
+
+  char pattern[] = "SIZE";
+  if(strstr(server_response, pattern) == NULL) {
+    printf("Server error: %s", server_response);
+    close(socket_desc);
+    return -1;
+  }
+
+  long file_size = atol(server_response + 5);
+
+  snprintf(buffer, sizeof(buffer), "READY");
+  send(socket_desc, buffer, strlen(buffer), 0);
+
+  createDirectories(local_file_path);
+  FILE *fptr = fopen(local_file_path, "wb");
+  if(fptr == NULL) {
+    printf("Coundn't open file\n");
+    return -1;
+  }
+
+  long total_bytes_received = 0;
   
-  printf("Server's response: %s\n",server_message);
-  
-  // Close the socket:
-  close(socket_desc);
-  
+  while(total_bytes_received < file_size) {
+    long remaining_bytes = file_size - total_bytes_received;
+    size_t bytes_to_read = (remaining_bytes < BUFFER_SIZE) ? remaining_bytes : BUFFER_SIZE;
+
+    ssize_t bytes = recv(socket_desc, buffer, bytes_to_read, 0);
+    if(bytes <= 0) {
+      printf("Cound't receive data\n");
+      fclose(fptr);
+      return -1;
+    }
+
+    fwrite(buffer, 1, bytes, fptr);
+    total_bytes_received += bytes;
+  }
+
+  fclose(fptr);
+  printf("Data written successfully\n");
   return 0;
 }
+
+int handleRM(int socket_desc, char* remote_file_path) {
+  char buffer[BUFFER_SIZE];
+  snprintf(buffer, sizeof(buffer), "RM %s", remote_file_path);
+
+  if(send(socket_desc, buffer, strlen(buffer), 0) < 0) {
+    printf("Couldn't send command\n");
+    return -1;
+  }
+
+  char server_response[256];
+  memset(server_response, '\0', sizeof(server_response));
+
+  if(recv(socket_desc, server_response, sizeof(server_response), 0) < 0) {
+    printf("Error while receiving server's message\n");
+    return -1;
+  }
+
+  printf("Server's response: %s", server_response);
+  return 0;
+
+}
+
+int handleLS(int socket_desc, char* remote_file_path) {
+  char buffer[BUFFER_SIZE];
+  snprintf(buffer, sizeof(buffer), "LS %s", remote_file_path);
+
+  if(send(socket_desc, buffer, strlen(buffer), 0) < 0) {
+    printf("Couldn't send command\n");
+    return -1;
+  }
+
+  memset(buffer, '\0', sizeof(buffer));
+  ssize_t bytes = recv(socket_desc, buffer, sizeof(buffer) - 1, 0);
+  if(bytes <= 0) {
+    printf("Error receiving response\n");
+    return -1;
+  }
+
+  printf("%s", buffer);
+  return 0;
+}
+
+int createDirectories( char* path) {
+    char tmp[512];
+    strncpy(tmp, path, sizeof(tmp));
+    
+    char *last_slash = strrchr(tmp, '/');
+    if (!last_slash) return 0;  
+    
+    *last_slash = '\0';  
+    
+    for (char *p = tmp + 1; *p; p++) {
+        if (*p == '/') {
+            *p = '\0';
+            mkdir(tmp, 0755);
+            *p = '/';
+        }
+    }
+    mkdir(tmp, 0755);
+    
+    return 0;
+}
+

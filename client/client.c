@@ -3,7 +3,7 @@
 
 int main(int argc, char *argv[])
 {
-  if(argc < 3) {
+  if(argc < 2) {
     printUsage();
     return 1;
   }
@@ -95,6 +95,18 @@ int main(int argc, char *argv[])
     return res;
   } 
 
+  if(strcmp(command, "STOP") == 0) {
+    int socket_desc = connectToServer();
+    if(socket_desc < 0) {
+      return 1;
+    } 
+    send(socket_desc, "STOP", 4, 0);
+    close(socket_desc);
+    return 0;
+  }
+
+  printf("Command not recognized: %s\n", command);
+  printUsage();
   return 1;
 }
 

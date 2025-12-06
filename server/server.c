@@ -2,6 +2,16 @@
 #include "config.h"
 
 pthread_mutex_t file_mutex = PTHREAD_MUTEX_INITIALIZER;
+int socket_desc = -1;
+
+void sigIntHandler(int sig) {
+    printf("\nShutting down server...\n");
+    if(socket_desc >= 0) {
+        close(socket_desc);
+    }
+    pthread_mutex_destroy(&file_mutex);
+    exit(0);
+}
 
 /**
  * @brief Entry point of the server. 
@@ -18,6 +28,8 @@ int main(void)
   struct sockaddr_in server_addr, client_addr;
   pthread_t tid;
 
+  signal(SIGINT, sigIntHandler);
+
 
   // Creates root dir in server folder, name mentioned in config
   mkdir(ROOT_DIR, 0755);
@@ -28,6 +40,9 @@ int main(void)
     printf("Error while creating socket\n");
     return -1;
   }
+
+  int opt = 1;
+  setsockopt(socket_desc, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
   // Set port and IP:
   server_addr.sin_family = AF_INET;

@@ -11,6 +11,7 @@
 #include <string.h>
 #include <sys/stat.h> 
 #include <time.h> 
+#include <signal.h>
 
 extern pthread_mutex_t file_mutex;
 extern int socket_desc;

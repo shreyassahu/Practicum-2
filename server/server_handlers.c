@@ -50,7 +50,7 @@ void* handleClient(void *args) {
   }
 
   else {
-    send_error(client_sock, "Unknown command");
+    sendError(client_sock, "Unknown command");
   }
 
   close(client_sock);
@@ -59,12 +59,12 @@ void* handleClient(void *args) {
 }
 
 /**
- * @brief 
+ * @brief Handles the write command for the server
  * 
- * @param client_sock 
- * @param remote_path 
- * @param file_size 
- * @return int 
+ * @param client_sock Client connection
+ * @param remote_path Server storage path
+ * @param file_size File size sent by client
+ * @return int 0 if no error, -1 if error
  */
 int handleWrite(int client_sock, char* remote_path, long file_size) {
 
@@ -117,6 +117,13 @@ int handleWrite(int client_sock, char* remote_path, long file_size) {
   
 }
 
+/**
+ * @brief Handles the get command for the server
+ * 
+ * @param client_sock Client connection
+ * @param remote_path Server storage path
+ * @return int 0 if no error, -1 if error
+ */
 int handleGet(int client_sock, char* remote_path) {
 
   char full_path[512];
@@ -142,6 +149,8 @@ int handleGet(int client_sock, char* remote_path) {
 
   ssize_t bytes_read = recv(client_sock, buffer, sizeof(buffer), 0);
   if(bytes_read <= 0) {
+    fclose(fptr);
+    pthread_mutex_unlock(&file_mutex);
     close(client_sock);
     return -1;
   }
@@ -151,6 +160,7 @@ int handleGet(int client_sock, char* remote_path) {
   if(strcmp(buffer, "READY") != 0) {
     sendError(client_sock, "Didn't establish successful connection\n");
     fclose(fptr);
+    pthread_mutex_unlock(&file_mutex);
     return -1;
   }
 
@@ -167,6 +177,13 @@ int handleGet(int client_sock, char* remote_path) {
   return 0;
 }
 
+/**
+ * @brief Handles the RM command for the server
+ * 
+ * @param client_sock client connection
+ * @param remote_file_path server storage path
+ * @return int 0 if no error, -1 if error
+ */
 int handleRM(int client_sock, char* remote_file_path) {
   char full_path[512];
   snprintf(full_path, sizeof(full_path), "%s/%s", ROOT_DIR, remote_file_path);
@@ -186,6 +203,13 @@ int handleRM(int client_sock, char* remote_file_path) {
   }
 }
 
+/**
+ * @brief Handles the LS command for the server
+ * 
+ * @param client_sock client connection
+ * @param remote_path server storage path
+ * @return int 0 if no error, -1 if error
+ */
 int handleLS(int client_sock, char* remote_path) {
 
   char full_path[512];
@@ -230,6 +254,12 @@ int handleLS(int client_sock, char* remote_path) {
   return 0;
 }
 
+/**
+ * @brief Get the Next Version from stored files
+ * 
+ * @param file_path file path stored in server
+ * @return int 0 if no error, -1 if error
+ */
 int getNextVersion(char* file_path) {
   int version = 1;
   char version_path[1024];
@@ -244,18 +274,36 @@ int getNextVersion(char* file_path) {
   }
 }
 
+/**
+ * @brief Sends custom response message back to client
+ * 
+ * @param client_sock client connection
+ * @param message message to send to client
+ */
 void sendResponse(int client_sock, char* message) {
   char buffer[256];
   snprintf(buffer, sizeof(buffer), "%s", message);
   send(client_sock, buffer, strlen(buffer), 0);
 }
 
+/**
+ * @brief Sends custom error message to client
+ * 
+ * @param client_sock client connection
+ * @param message error message to send to client
+ */
 void sendError(int client_sock, char* message) {
   char buffer[256];
   snprintf(buffer, sizeof(buffer), "Error: %s", message);
   send(client_sock, buffer, strlen(buffer), 0);
 }
 
+/**
+ * @brief Creates a directory in server storage path
+ * 
+ * @param path new directory to be created in storage path
+ * @return int 0 
+ */
 int createDirectories(char *path) {
     char tmp[512];
     strncpy(tmp, path, sizeof(tmp));

@@ -13,6 +13,7 @@
 #include <time.h> 
 
 extern pthread_mutex_t file_mutex;
+extern int socket_desc;
 
 void* handleClient(void *args);
 int handleWrite(int client_sock, char* remote_path, long file_size);

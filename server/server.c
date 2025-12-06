@@ -3,15 +3,25 @@
 
 pthread_mutex_t file_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+/**
+ * @brief Entry point of the server. 
+ *        -Creates and binds TCP socket
+ *        -Listens for incoming client connections
+ *        -Creates a new thread for each client request
+ * 
+ * @return 0 on success, -1 on error
+ */
 int main(void)
 {
-  int socket_desc, client_sock;
+  int client_sock;
   socklen_t client_size;
   struct sockaddr_in server_addr, client_addr;
   pthread_t tid;
 
 
+  // Creates root dir in server folder, name mentioned in config
   mkdir(ROOT_DIR, 0755);
+
 
   socket_desc = socket(AF_INET, SOCK_STREAM, 0);
   if(socket_desc < 0){
@@ -61,6 +71,7 @@ int main(void)
     int *client_sock_ptr = malloc(sizeof(int));
     *client_sock_ptr = client_sock;
 
+    // Thread created and handled for each client request
     if(pthread_create(&tid, NULL, handleClient, client_sock_ptr) != 0) {
       printf("Failed to create thread\n");
       close(client_sock);
@@ -73,8 +84,3 @@ int main(void)
   close(socket_desc);
   return 0;
 }
-
-
-
-
-

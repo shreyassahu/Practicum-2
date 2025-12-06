@@ -1,6 +1,13 @@
 #include "server.h"
 #include "config.h"
 
+/**
+ * @brief Handles client connections
+ *        -Receives command from client
+ *        -Passes function to respective command handlers
+ * @param args ptr to client socket 
+ * @return NULL
+ */
 void* handleClient(void *args) {
   int client_sock = *(int*)args;
   free(args);
@@ -35,11 +42,30 @@ void* handleClient(void *args) {
     handleLS(client_sock, remote_path);
   }
 
+  else if (strncmp(buffer, "STOP", 4) == 0) {
+    printf("Shutting down server\n");
+    close(client_sock);
+    close(socket_desc);
+    exit(0);
+  }
+
+  else {
+    send_error(client_sock, "Unknown command");
+  }
+
   close(client_sock);
   printf("Client Disconnected\n");
   return NULL;
 }
 
+/**
+ * @brief 
+ * 
+ * @param client_sock 
+ * @param remote_path 
+ * @param file_size 
+ * @return int 
+ */
 int handleWrite(int client_sock, char* remote_path, long file_size) {
 
   char buffer[BUFFER_SIZE];
@@ -179,13 +205,12 @@ int handleLS(int client_sock, char* remote_path) {
                        "[current] %s - %s (%ld bytes)\n", full_path, time_str, st.st_size);
   }
 
-  // Check all versions
   int version = 1;
   char version_path[1024];
   while(1) {
     snprintf(version_path, sizeof(version_path), "%s.v%d", full_path, version);
     if(stat(version_path, &st) != 0) {
-      break;  // No more versions
+      break; 
     }
     char time_str[64];
     strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S", localtime(&st.st_mtime));

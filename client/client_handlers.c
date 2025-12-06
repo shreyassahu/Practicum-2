@@ -1,6 +1,10 @@
 #include "client.h"
 #include "config.h"
 
+/**
+ * @brief Prints the allowed commands
+ * 
+ */
 void printUsage() {
   printf("The minimum number of arguments is 4\n");
   printf("Allowed commands are:\n");
@@ -9,6 +13,11 @@ void printUsage() {
   printf("rfs RM remote-file-path\n");
 }
 
+/**
+ * @brief Connects the client to the server
+ * 
+ * @return int socket descriptor if successful, else -1
+ */
 int connectToServer() {
   int socket_desc = socket(AF_INET, SOCK_STREAM, 0);
   struct sockaddr_in server_addr;
@@ -36,6 +45,14 @@ int connectToServer() {
   return socket_desc;
 }
 
+/**
+ * @brief Handles the write command for client
+ * 
+ * @param socket_desc socket descriptor
+ * @param local_file_path client data path
+ * @param remote_file_path server data path
+ * @return int 0 success, -1 error
+ */
 int handleWrite(int socket_desc, char* local_file_path, char* remote_file_path) {
   FILE *fptr = fopen(local_file_path, "rb");
 
@@ -97,6 +114,14 @@ int handleWrite(int socket_desc, char* local_file_path, char* remote_file_path) 
 
 }
 
+/**
+ * @brief Handles the get command for the client
+ * 
+ * @param socket_desc socket descriptor
+ * @param remote_file_path server data path
+ * @param local_file_path client output data path
+ * @return int 0 success, -1 error
+ */
 int handleGet(int socket_desc, char* remote_file_path, char* local_file_path) {
   char buffer[BUFFER_SIZE];
   snprintf(buffer, sizeof(buffer), "GET %s", remote_file_path);
@@ -155,6 +180,13 @@ int handleGet(int socket_desc, char* remote_file_path, char* local_file_path) {
   return 0;
 }
 
+/**
+ * @brief Handles the RM command for client
+ * 
+ * @param socket_desc socket descriptor
+ * @param remote_file_path file to be deleted in server
+ * @return int 0 success, -1 error
+ */
 int handleRM(int socket_desc, char* remote_file_path) {
   char buffer[BUFFER_SIZE];
   snprintf(buffer, sizeof(buffer), "RM %s", remote_file_path);
@@ -177,6 +209,13 @@ int handleRM(int socket_desc, char* remote_file_path) {
 
 }
 
+/**
+ * @brief Handles the LS command for the client
+ * 
+ * @param socket_desc socket descriptor
+ * @param remote_file_path server file path for LS
+ * @return int 0 success, -1 error
+ */
 int handleLS(int socket_desc, char* remote_file_path) {
   char buffer[BUFFER_SIZE];
   snprintf(buffer, sizeof(buffer), "LS %s", remote_file_path);
@@ -197,6 +236,12 @@ int handleLS(int socket_desc, char* remote_file_path) {
   return 0;
 }
 
+/**
+ * @brief Creates directory in client folder, used in GET command
+ * 
+ * @param file_path client output directory
+ * @return int 0
+ */
 int createDirectories(char* file_path) {
     char tmp[512];
     strncpy(tmp, file_path, sizeof(tmp));
